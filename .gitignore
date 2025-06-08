@@ -1,0 +1,80 @@
+# Data outputs and analysis results
+data_outputs/
+*.csv
+*.xlsx
+*.json
+*.parquet
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Cache directories and files
+cache/
+__pycache__/
+.cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Plots and visualizations
+plots/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.pdf
+*.eps
+
+# Jupyter Notebook outputs and checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Python virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# Large data files (adjust extensions as needed)
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Model files (if you're training ML models)
+*.model
+*.weights
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+
+# Environment variables
+.env
+.env.local
+.env.*.local
