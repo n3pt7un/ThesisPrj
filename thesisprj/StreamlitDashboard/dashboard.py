@@ -73,7 +73,7 @@ with st.sidebar:
     # Year selection
     year = st.selectbox(
         "Select Year",
-        options=[2025, 2024, 2023, 2022],
+        options=[2025, 2024, 2023, 2022, 2021],
         index=0
     )
     
