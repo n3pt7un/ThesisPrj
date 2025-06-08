@@ -78,3 +78,5 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+.cursorignore.cursorignore
