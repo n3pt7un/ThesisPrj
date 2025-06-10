@@ -20,11 +20,13 @@ An interactive Streamlit dashboard for visualizing aggregated F1 telemetry data 
 
 1. Ensure you have Poetry installed
 2. Install dependencies:
+
 ```bash
 poetry install
 ```
 
 3. The dashboard requires the following dependencies (already added to pyproject.toml):
+
 - streamlit
 - plotly
 - fastf1
