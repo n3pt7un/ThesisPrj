@@ -468,7 +468,7 @@ def create_acceleration_heatmap(
     return fig
 
 
-def create_speed_trace_comparison(
+def create_speed_trace_comparison_legacy(
     session,
     drivers: List[str],
     lap_number: int
@@ -543,6 +543,70 @@ def create_speed_trace_comparison(
         hovermode='x unified'
     )
     
+    return fig
+
+
+def create_speed_trace_comparison(
+    session,
+    drivers: List[str],
+    lap_number: int
+) -> go.Figure:
+    """Speed trace using spline-based arc length."""
+
+    fig = go.Figure()
+    team_colors_used = {}
+
+    for i, driver in enumerate(drivers):
+        try:
+            telemetry = get_driver_telemetry_for_lap(session, driver, lap_number)
+
+            if telemetry.empty:
+                continue
+
+            style = get_driver_style(session, driver, i, team_colors_used)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=telemetry['s_lap'],
+                    y=telemetry['Speed'],
+                    mode='lines',
+                    name=f"{driver} ({style['team_name']})",
+                    line=dict(color=style['color'], dash=style['line_style'], width=2),
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting speed trace for {driver}: {e}")
+
+    try:
+        circuit_info = session.get_circuit_info()
+        corners = circuit_info.corners
+        for _, corner in corners.iterrows():
+            fig.add_vline(
+                x=corner['Distance'],
+                line_dash="dot",
+                line_color="gray",
+                opacity=0.5,
+            )
+            fig.add_annotation(
+                x=corner['Distance'],
+                y=300,
+                text=f"T{corner['Number']}",
+                showarrow=False,
+                yshift=10,
+            )
+    except Exception:
+        pass
+
+    fig.update_xaxes(title_text="Spline Distance (m)")
+    fig.update_yaxes(title_text="Speed (km/h)")
+    fig.update_layout(
+        height=500,
+        title_text=f"Speed Trace Comparison - Lap {lap_number}",
+        template="plotly_dark",
+        hovermode='x unified',
+    )
+
     return fig
 
 

@@ -17,7 +17,7 @@ import pickle
 # 
 
 # %%
-def get_all_car_data(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
+def get_all_car_data_legacy(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
     driver_laps = session.laps.pick_drivers(driver).copy()
     
     driver_laps.loc[:, 'InPit'] = driver_laps['PitOutTime'].notna()
@@ -72,7 +72,7 @@ def get_all_car_data(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
     return race_car_data
 
 # %%
-def get_all_car_data(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
+def get_all_car_data_spline_legacy(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
     # ----------------------------------------------------------------
     # 1) Build reference spline once, from the session's fastest lap
     # ----------------------------------------------------------------
@@ -161,6 +161,65 @@ def get_all_car_data(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
 
     return pd.concat(all_data, ignore_index=True)
 
+
+def get_all_car_data(session: fastf1.core.Session, driver: str) -> pd.DataFrame:
+    """Get merged telemetry with spline-based arc length per lap."""
+
+    # build reference racing line from fastest lap
+    fastest = session.laps.pick_fastest()
+    base = fastest.get_car_data().merge_channels(fastest.get_pos_data())
+    base = base.add_distance()
+    base = base.set_index('Time')
+    base[['X', 'Y']] = base[['X', 'Y']].interpolate(method='time').ffill().bfill()
+    base = base.reset_index()
+
+    tck, u = splprep([base['X'], base['Y']], s=0, per=True)
+    u_fine = np.linspace(0, 1, 10000)
+    x_fine, y_fine = splev(u_fine, tck)
+    dx = np.diff(x_fine)
+    dy = np.diff(y_fine)
+    ds = np.sqrt(dx ** 2 + dy ** 2)
+    s_fine = np.concatenate([[0], np.cumsum(ds)])
+    total_length = s_fine[-1]
+    spline_tree = cKDTree(np.column_stack([x_fine, y_fine]))
+
+    driver_laps = (
+        session.laps
+        .pick_drivers(driver)
+        .assign(InPit=lambda df: df['PitOutTime'].notna(),
+                OutPit=lambda df: df['PitInTime'].notna())
+        .pick_accurate()
+    )
+
+    all_data = []
+    for _, lap in driver_laps.iterrows():
+        car = lap.get_car_data()
+        pos = lap.get_pos_data()
+        merged = car.merge_channels(pos)
+
+        t = merged['Time'].dt.total_seconds()
+        merged[['X', 'Y']] = merged[['X', 'Y']].interpolate(method='linear', x=t).ffill().bfill()
+
+        _, idx = spline_tree.query(merged[['X', 'Y']].values)
+        merged['s_raw'] = s_fine[idx]
+        merged['s_lap'] = merged['s_raw'] - merged['s_raw'].min()
+
+        merged['LapNumber'] = int(lap.LapNumber)
+        merged['Position'] = lap.Position
+        merged['OutPit'] = merged['LapNumber'].isin(driver_laps.loc[driver_laps['OutPit'], 'LapNumber'])
+        merged['InPit'] = merged['LapNumber'].isin(driver_laps.loc[driver_laps['InPit'], 'LapNumber'])
+        merged['Driver'] = driver
+        merged['Session'] = session.name
+        merged['TyreCompound'] = lap.Compound
+        merged['TyreLife'] = lap.TyreLife
+
+        tsec = merged['Time'].dt.total_seconds().values
+        merged['Acceleration(m/s^2)'] = np.gradient(merged['Speed'].values / 3.6, tsec)
+
+        all_data.append(merged)
+
+    return pd.concat(all_data, ignore_index=True)
+
 # %%
 def get_track_data(session: fastf1.core.Session) -> pd.DataFrame:
     info = session.get_circuit_info()
@@ -215,7 +274,7 @@ def calculate_lap_gear_changes(gear_series):
     return num_changes
 
 # %%
-def classify_corners_by_speed(
+def classify_corners_by_speed_legacy(
     session: fastf1.core.Session,
     distance_col: str = "Distance",
     angle_col: str = "Angle",
@@ -315,7 +374,74 @@ def classify_corners_by_speed(
             return 'Fast'
     
     df_results['Class'] = df_results['MinSpeed'].apply(classify_by_speed)
-    
+
+    return df_results
+
+
+def classify_corners_by_speed(
+    session: fastf1.core.Session,
+    distance_col: str = "Distance",
+    angle_col: str = "Angle",
+    speed_col: str = "Speed",
+    window: float = 25.0
+) -> pd.DataFrame:
+    """Updated corner classification using spline distances."""
+
+    info = session.get_circuit_info()
+    corners = info.corners.copy()
+
+    corners['AbsAngle'] = corners[angle_col].abs()
+    corners['CornerAngle'] = corners['AbsAngle'].apply(
+        lambda x: 'Fast' if x < 50 else 'Medium' if (50 < x < 100) else 'Slow'
+    )
+
+    fastest_driver = session.laps.pick_fastest().Driver
+    telemetry_df = get_all_car_data(session, fastest_driver)
+
+    results = []
+    for i, row in corners.iterrows():
+        apex_dist = row[distance_col]
+        angle = row[angle_col]
+        abs_angle = row['AbsAngle']
+        corner_angle_class = row['CornerAngle']
+
+        mask = (telemetry_df['s_lap'] >= apex_dist - window) & (
+            telemetry_df['s_lap'] <= apex_dist + window
+        )
+        segment = telemetry_df[mask]
+        if not segment.empty:
+            min_speed = segment[speed_col].min()
+        else:
+            min_speed = np.nan
+
+        results.append({
+            'ApexDistance': apex_dist,
+            'Angle': angle,
+            'AbsAngle': abs_angle,
+            'CornerAngle': corner_angle_class,
+            'MinSpeed': min_speed
+        })
+
+    df_results = pd.DataFrame(results)
+
+    valid_speeds = df_results['MinSpeed'].dropna()
+    if not valid_speeds.empty:
+        q1, q2 = np.percentile(valid_speeds, [33, 66])
+    else:
+        q1, q2 = 0, 0
+
+    def classify_by_speed(speed):
+        if pd.isna(speed):
+            return None
+        elif speed < q1:
+            return 'Slow'
+        elif speed < q2:
+            return 'Medium'
+        else:
+            return 'Fast'
+
+    df_results['Class'] = df_results['MinSpeed'].apply(classify_by_speed)
+
     return df_results
 
 # %%
@@ -349,7 +475,7 @@ def aggregation_function(telemetry):
     ).reset_index()
 
 # %%
-def extract_corner_telemetry_sections(
+def extract_corner_telemetry_sections_legacy(
     session: fastf1.core.Session,
     driver: str,
     distance_before: float = 100.0,
@@ -489,6 +615,95 @@ def extract_corner_telemetry_sections(
     
     return results
 
+
+def extract_corner_telemetry_sections(
+    session: fastf1.core.Session,
+    driver: str,
+    distance_before: float = 100.0,
+    distance_after: float = 100.0,
+    selected_corners: list = None,
+    corner_selection_method: str = 'default'
+) -> dict:
+    """New spline-based corner telemetry extraction."""
+
+    telemetry_data = get_all_car_data(session, driver)
+    corner_classifications = classify_corners_by_speed(session)
+
+    if selected_corners is None:
+        if corner_selection_method == 'default':
+            valid = corner_classifications.dropna(subset=['MinSpeed'])
+            if len(valid) >= 3:
+                sorted_c = valid.sort_values('MinSpeed')
+                selected_indices = [sorted_c.index[0], sorted_c.index[len(sorted_c)//2], sorted_c.index[-1]]
+            else:
+                selected_indices = valid.index.tolist()
+        elif corner_selection_method == 'all':
+            selected_indices = corner_classifications.index.tolist()
+        else:
+            raise ValueError("corner_selection_method must be 'default' or 'all'")
+    else:
+        selected_indices = selected_corners
+
+    results = {}
+    for corner_idx in selected_indices:
+        corner_info = corner_classifications.iloc[corner_idx]
+        apex_distance = corner_info['ApexDistance']
+
+        into_turn_data = []
+        out_of_turn_data = []
+        for lap_num in telemetry_data['LapNumber'].unique():
+            lap_data = telemetry_data[telemetry_data['LapNumber'] == lap_num].copy()
+            if lap_data.empty:
+                continue
+
+            before_start = apex_distance - distance_before
+            before_end = apex_distance
+            after_start = apex_distance
+            after_end = apex_distance + distance_after
+
+            into_mask = (lap_data['s_lap'] >= before_start) & (lap_data['s_lap'] < before_end)
+            out_mask = (lap_data['s_lap'] >= after_start) & (lap_data['s_lap'] <= after_end)
+
+            into_section = lap_data[into_mask].copy()
+            out_section = lap_data[out_mask].copy()
+
+            if not into_section.empty:
+                into_section['Section'] = 'into_turn'
+                into_section['CornerIndex'] = corner_idx
+                into_turn_data.append(into_section)
+
+            if not out_section.empty:
+                out_section['Section'] = 'out_of_turn'
+                out_section['CornerIndex'] = corner_idx
+                out_of_turn_data.append(out_section)
+
+        if into_turn_data:
+            combined_into = pd.concat(into_turn_data, ignore_index=True)
+            into_aggregated = aggregate_section_data(combined_into)
+        else:
+            into_aggregated = None
+
+        if out_of_turn_data:
+            combined_out = pd.concat(out_of_turn_data, ignore_index=True)
+            out_aggregated = aggregate_section_data(combined_out)
+        else:
+            out_aggregated = None
+
+        corner_name = f"corner_{corner_idx}"
+        results[corner_name] = {
+            'corner_info': {
+                'apex_distance': apex_distance,
+                'angle': corner_info['Angle'],
+                'min_speed': corner_info['MinSpeed'],
+                'speed_class': corner_info['Class'],
+                'angle_class': corner_info['CornerAngle']
+            },
+            'into_turn': into_aggregated,
+            'out_of_turn': out_aggregated
+        }
+
+    return results
+
 def aggregate_section_data(section_data: pd.DataFrame) -> dict:
     """
     Aggregate telemetry data for a corner section.
@@ -535,7 +750,7 @@ def aggregate_section_data(section_data: pd.DataFrame) -> dict:
     return aggregated
 
 # %%
-def compare_corner_sections(corner_results: dict, corner_name: str = None) -> pd.DataFrame:
+def compare_corner_sections_legacy(corner_results: dict, corner_name: str = None) -> pd.DataFrame:
     """
     Create a comparison DataFrame for into_turn vs out_of_turn metrics.
     
@@ -581,6 +796,38 @@ def compare_corner_sections(corner_results: dict, corner_name: str = None) -> pd
             out_row['AngleClass'] = corner_info['angle_class']
             comparison_data.append(out_row)
     
+    return pd.DataFrame(comparison_data)
+
+
+def compare_corner_sections(corner_results: dict, corner_name: str = None) -> pd.DataFrame:
+    """Comparison helper for new corner extraction."""
+
+    comparison_data = []
+    corners_to_analyze = [corner_name] if corner_name else corner_results.keys()
+
+    for corner in corners_to_analyze:
+        if corner not in corner_results:
+            continue
+
+        corner_data = corner_results[corner]
+        corner_info = corner_data['corner_info']
+
+        if corner_data['into_turn']:
+            into_row = corner_data['into_turn'].copy()
+            into_row['Corner'] = corner
+            into_row['Section'] = 'into_turn'
+            into_row['SpeedClass'] = corner_info['speed_class']
+            into_row['AngleClass'] = corner_info['angle_class']
+            comparison_data.append(into_row)
+
+        if corner_data['out_of_turn']:
+            out_row = corner_data['out_of_turn'].copy()
+            out_row['Corner'] = corner
+            out_row['Section'] = 'out_of_turn'
+            out_row['SpeedClass'] = corner_info['speed_class']
+            out_row['AngleClass'] = corner_info['angle_class']
+            comparison_data.append(out_row)
+
     return pd.DataFrame(comparison_data)
 
 # %%

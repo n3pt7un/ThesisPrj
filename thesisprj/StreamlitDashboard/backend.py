@@ -219,7 +219,7 @@ def get_corner_classifications(session: fastf1.core.Session) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def get_driver_telemetry_for_lap(
+def get_driver_telemetry_for_lap_legacy(
     session: fastf1.core.Session,
     driver: str,
     lap_number: int
@@ -262,6 +262,46 @@ def get_driver_telemetry_for_lap(
         merged_data['Compound'] = lap.Compound
         
         return merged_data
+    except Exception as e:
+        logger.error(f"Error getting telemetry for {driver} lap {lap_number}: {e}")
+        return pd.DataFrame()
+
+
+def get_driver_telemetry_for_lap(
+    session: fastf1.core.Session,
+    driver: str,
+    lap_number: int
+) -> pd.DataFrame:
+    """Get lap telemetry aligned to racing line."""
+    try:
+        fastest = session.laps.pick_fastest()
+        ref = fastest.get_car_data().merge_channels(fastest.get_pos_data()).add_distance()
+        ref = ref.set_index('Time')
+        ref[['X', 'Y']] = ref[['X', 'Y']].interpolate(method='time').ffill().bfill()
+        ref = ref.reset_index()
+        tck, _ = splprep([ref['X'], ref['Y']], s=0, per=True)
+        u_fine = np.linspace(0, 1, 10000)
+        x_fine, y_fine = splev(u_fine, tck)
+        dx = np.diff(x_fine)
+        dy = np.diff(y_fine)
+        ds = np.sqrt(dx**2 + dy**2)
+        s_fine = np.concatenate([[0], np.cumsum(ds)])
+        tree = cKDTree(np.column_stack([x_fine, y_fine]))
+
+        driver_laps = session.laps.pick_drivers(driver)
+        lap = driver_laps[driver_laps['LapNumber'] == lap_number].iloc[0]
+        car = lap.get_car_data()
+        pos = lap.get_pos_data()
+        merged = car.merge_channels(pos)
+        t = merged['Time'].dt.total_seconds()
+        merged[['X','Y']] = merged[['X','Y']].interpolate(method='linear', x=t).ffill().bfill()
+        _, idx = tree.query(merged[['X','Y']].values)
+        merged['s_lap'] = s_fine[idx] - s_fine[idx].min()
+        merged['Driver'] = driver
+        merged['LapNumber'] = lap_number
+        merged['LapTime'] = lap.LapTime
+        merged['Compound'] = lap.Compound
+        return merged
     except Exception as e:
         logger.error(f"Error getting telemetry for {driver} lap {lap_number}: {e}")
         return pd.DataFrame()
