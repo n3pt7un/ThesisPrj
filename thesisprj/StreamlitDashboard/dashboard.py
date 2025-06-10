@@ -130,9 +130,15 @@ with st.sidebar:
         show_acceleration_patterns = st.checkbox("Acceleration Patterns", value=True)
         show_speed_traces = st.checkbox("Speed Traces", value=False)
         show_throttle_brake = st.checkbox("Throttle/Brake Analysis", value=False)
+        plot_theme = st.selectbox("Plot Theme", ["Dark", "Light"], index=0)
+        line_width = st.slider("Line Width", 1, 5, 2)
+        visualizations.set_plotly_template("plotly_dark" if plot_theme == "Dark" else "plotly")
+        visualizations.set_default_line_width(line_width)
+
         
         # Corner selection for detailed analysis
         if show_corner_analysis:
+
             st.subheader("Corner Selection")
             corner_selection_method = st.radio(
                 "Corner Selection Method",
