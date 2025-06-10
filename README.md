@@ -4,6 +4,26 @@
 
 This thesis project aims to **cluster Formula 1 drivers based on their driving styles** across multiple races and seasons (2018–2024). By leveraging detailed telemetry data from the FastF1 API, the project's central goal is to develop a robust **distance metric** that quantifies stylistic similarities between drivers. This metric will facilitate effective clustering, ultimately revealing hidden patterns and nuances in driver techniques that go beyond raw performance.
 
+## Quick Start
+
+1. Install dependencies (use Poetry or pip):
+```bash
+pip install -r requirements.txt  # or `poetry install`
+```
+2. Launch the dashboard:
+```bash
+cd thesisprj/StreamlitDashboard
+streamlit run dashboard.py
+```
+
+Telemetry data is downloaded automatically via FastF1 and cached under `thesisprj/StreamlitDashboard/cache`.
+## Data Requirements
+
+FastF1 automatically caches downloaded telemetry data in `thesisprj/StreamlitDashboard/cache`.
+If you already have FastF1 cache files (`.ff1pkl`), place them in this directory to avoid re-downloading.
+A small example dataset is provided in `data_outputs/` for experimentation.
+
+
 The core of the project involves a sophisticated data pipeline that extracts, preprocesses, and engineers a rich set of features from telemetry data. These features are then used to build a comprehensive driver profile, which serves as the basis for clustering analysis.
 
 ## 2. Project Architecture

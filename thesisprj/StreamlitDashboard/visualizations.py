@@ -26,6 +26,18 @@ logger = logging.getLogger(__name__)
 LINE_STYLES = ['solid', 'dash', 'dot', 'dashdot']
 MARKER_SYMBOLS = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle-up']
 
+PLOTLY_TEMPLATE = "plotly_dark"
+DEFAULT_LINE_WIDTH = 2
+
+def set_plotly_template(template: str):
+    global PLOTLY_TEMPLATE
+    PLOTLY_TEMPLATE = template
+
+def set_default_line_width(width: int):
+    global DEFAULT_LINE_WIDTH
+    DEFAULT_LINE_WIDTH = width
+
+
 
 def get_driver_style(session, driver: str, driver_index: int, team_colors_used: Dict[str, int]) -> Dict:
     """
@@ -161,7 +173,7 @@ def create_corner_comparison_plot(
                 x=driver_data['Section'],
                 name=driver,
                 marker_color=style['color'],
-                line=dict(width=2),
+                line=dict(width=DEFAULT_LINE_WIDTH),
                 showlegend=False
             ),
             row=1, col=2
@@ -244,7 +256,7 @@ def create_corner_comparison_plot(
         height=800,
         showlegend=True,
         title_text="Corner Performance Analysis",
-        template="plotly_dark"
+        template=PLOTLY_TEMPLATE
     )
     
     return fig
@@ -292,7 +304,7 @@ def create_lap_performance_plot(
                     line=dict(
                         color=style['color'],
                         dash=style['line_style'],
-                        width=2
+                        width=DEFAULT_LINE_WIDTH
                     ),
                     marker=dict(
                         color=style['color'],
@@ -313,7 +325,7 @@ def create_lap_performance_plot(
                 line=dict(
                     color=style['color'],
                     dash=style['line_style'],
-                    width=2
+                    width=DEFAULT_LINE_WIDTH
                 ),
                 showlegend=False
             ),
@@ -375,7 +387,7 @@ def create_lap_performance_plot(
         height=800,
         showlegend=True,
         title_text="Lap Performance Analysis",
-        template="plotly_dark"
+        template=PLOTLY_TEMPLATE
     )
     
     return fig
@@ -462,7 +474,7 @@ def create_acceleration_heatmap(
     fig.update_layout(
         height=500,
         title_text="Acceleration/Deceleration Patterns",
-        template="plotly_dark"
+        template=PLOTLY_TEMPLATE
     )
     
     return fig
@@ -503,7 +515,7 @@ def create_speed_trace_comparison(
                     line=dict(
                         color=style['color'],
                         dash=style['line_style'],
-                        width=2
+                        width=DEFAULT_LINE_WIDTH
                     )
                 )
             )
@@ -539,7 +551,7 @@ def create_speed_trace_comparison(
     fig.update_layout(
         height=500,
         title_text=f"Speed Trace Comparison - Lap {lap_number}",
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         hovermode='x unified'
     )
     
@@ -611,7 +623,7 @@ def create_corner_radar_chart(
                 line=dict(
                     color=style['color'],
                     dash=style['line_style'],
-                    width=2
+                    width=DEFAULT_LINE_WIDTH
                 ),
                 name=f"{driver} ({style['team_name']})"
             )
@@ -626,7 +638,7 @@ def create_corner_radar_chart(
         ),
         showlegend=True,
         title="Driver Performance Radar",
-        template="plotly_dark",
+        template=PLOTLY_TEMPLATE,
         height=500
     )
     
@@ -669,7 +681,7 @@ def create_throttle_brake_plot(
                 line=dict(
                     color=style['color'],
                     dash=style['line_style'],
-                    width=2
+                    width=DEFAULT_LINE_WIDTH
                 ),
                 marker=dict(
                     color=style['color'],
@@ -702,7 +714,7 @@ def create_throttle_brake_plot(
         height=700,
         showlegend=True,
         title_text="Throttle Application Analysis",
-        template="plotly_dark"
+        template=PLOTLY_TEMPLATE
     )
     
     return fig
@@ -743,7 +755,7 @@ def create_sector_times_plot(
                     line=dict(
                         color=style['color'],
                         dash=style['line_style'],
-                        width=2
+                        width=DEFAULT_LINE_WIDTH
                     ),
                     marker=dict(
                         color=style['color'],
@@ -764,7 +776,7 @@ def create_sector_times_plot(
         height=400,
         showlegend=True,
         title_text="Sector Times Comparison",
-        template="plotly_dark"
+        template=PLOTLY_TEMPLATE
     )
     
     return fig

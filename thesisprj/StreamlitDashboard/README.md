@@ -113,6 +113,13 @@ LINE_STYLES = ['solid', 'dash', 'dot', 'dashdot']
 MARKER_SYMBOLS = ['circle', 'square', 'diamond', 'cross']
 ```
 
+You can also adjust the default Plotly template and line widths:
+```python
+from visualizations import set_plotly_template, set_default_line_width
+set_plotly_template("plotly")  # switch to light theme
+set_default_line_width(3)
+```
+
 ## Team Color Handling
 
 The dashboard automatically:
@@ -142,3 +149,4 @@ Example:
 - Comparison across multiple sessions
 - Machine learning insights integration
 - Real-time session analysis 
+
